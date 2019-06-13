@@ -4,25 +4,24 @@ require "openssl"
 module Redis::Cluster
   record Bootstrap,
     host : String? = nil,
-    port : Int32?  = nil,
+    port : Int32? = nil,
     sock : String? = nil,
     pass : String? = nil,
-    ssl  : Bool = false,
-    ssl_context  : OpenSSL::SSL::Context::Client? = nil do
-
+    ssl : Bool = false,
+    ssl_context : OpenSSL::SSL::Context::Client? = nil do
     def host
       if @host && @host =~ /:/
         raise "invalid hostname: #{@host}"
       end
       @host || "127.0.0.1"
     end
-         
+
     def port
       @port || 6379
     end
-         
+
     def sock?
-      !! @sock
+      !!@sock
     end
 
     def pass? : String?
@@ -31,12 +30,20 @@ module Redis::Cluster
     end
 
     # aliases
-    def pass       ; pass? ; end
-    def password   ; pass  ; end
-    def unixsocket ; sock  ; end
-         
-    def copy(host : String? = nil, port : Int32? = nil, sock : String? = nil, pass : String? = nil, ssl : Bool = false,ssl_context : OpenSSL::SSL::Context::Client? = nil)
-      Bootstrap.new(host: host||@host, port: port||@port, sock: sock||@sock, pass: pass||pass?, ssl: ssl||@ssl, ssl_context: ssl_context||@ssl_context)
+    def pass
+      pass?
+    end
+
+    def password
+      pass
+    end
+
+    def unixsocket
+      sock
+    end
+
+    def copy(host : String? = nil, port : Int32? = nil, sock : String? = nil, pass : String? = nil, ssl : Bool = false, ssl_context : OpenSSL::SSL::Context::Client? = nil)
+      Bootstrap.new(host: host || @host, port: port || @port, sock: sock || @sock, pass: pass || pass?, ssl: ssl || @ssl, ssl_context: ssl_context || @ssl_context)
     end
 
     def redis
@@ -64,7 +71,7 @@ module Redis::Cluster
     def to_s(io : IO)
       io << to_s
     end
-    
+
     def self.zero
       new(host: Addr::DEFAULT_HOST, port: Addr::DEFAULT_PORT, pass: nil)
     end
@@ -79,15 +86,25 @@ module Redis::Cluster
         ssl = true
       when %r{\A([a-z0-9\.\+-]+):/}
         raise "unknown scheme for Bootstrap: `#{$1}`"
+      when ""
+        return zero
       else
         s = "redis://#{s}"
       end
-        
+
       uri = URI.parse(s)
       pass = uri.user
       pass = nil if pass.to_s.empty?
-      if uri.path && uri.host.nil? && uri.port.nil?
-        return new(sock: uri.path, pass: pass, ssl: ssl)
+      if uri.path && uri.host.try &.empty? && uri.port.nil?
+        if pass
+          if uri.path.empty?
+            return zero.copy(port: uri.port, pass: pass, ssl: ssl)
+          else
+            return new(sock: uri.path, port: uri.port, pass: pass, ssl: ssl)
+          end
+        else
+          return new(sock: uri.path, pass: pass, ssl: ssl)
+        end
       end
       if uri.port && uri.port.not_nil! <= 0
         raise "invalid port for Bootstrap: `#{uri.port}`"
